@@ -1,18 +1,17 @@
-name: global-ew
+name: ewglobal
 channels:
 - conda-forge
 - defaults
 dependencies:
-- python=3
-- matplotlib
-- numpy
+- python=3.10.*
+- matplotlib=3.5.*
+- numpy=1.22.*
 - pip
-- scipy
-- xarray
+- scipy=1.8.*
+- xarray=2022.*
 - ipykernel
-- gsw
-- netcdf4
-- dask
+- gsw=3.*
+- netcdf4=1.5.*
 - cmocean
 - tqdm
-- cartopy
+- cartopy=0.20.*
