@@ -23,7 +23,10 @@
 % to be applied in the event of redundancies:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-setupGMACMD
+gmacmdroot = fullfile(pwd, '../');  
+addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib'));
+addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib/tools'));
+addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib/qc'));
 
 % 1. NAME OF META DATA FILE to search within:
 meta_infile = fullfile(gmacmdroot, 'GMACMD/GMACMDdata/metadata_ALL.mat');
