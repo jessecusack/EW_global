@@ -3,19 +3,8 @@ addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib'));
 addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib/tools'));
 addpath(fullfile(gmacmdroot, 'GMACMD/GMACMDlib/qc'));
 
-setupGMACMD % this adds some paths and defines the root directory
-
 meta = load('../data/internal/mooring_metadata.mat');
 
-% Now that we have time series grouped into moorings, we could, for
-% example, look at velocity depth profiles at different time shots, etc.
-% This would involve mapping all the current meters on a mooring onto a
-% common time vector. For simplicity, we will here just loop through the
-% moorings, then loop through the current meters on a mooring, and
-% calculate the mean kinetic energy of the time series.
-
-% First we'll initiailze a matrix to store the mean kinetic energies. This
-% will be the same size as the 'Mooring' meta data variables:
 meanKE = NaN*meta.Mooring_instruments;
 
 % Now loop through the moorings:
@@ -33,7 +22,7 @@ for i = 1:size(meta.Mooring_instruments,1)
         % Now that the above line has loaded u and v into the workspace we
         % can take the mean kinetic energy, noting that there may be NaNs
         % in the time series:
-        meanKE(i,j) = 0.5*mean(u.^2 + v.^2, 'omitnan');
+        meanKE(i,j) = 0.5*mean(M.u.^2 + M.v.^2, 'omitnan');
     
     end
     

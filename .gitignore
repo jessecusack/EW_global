@@ -2,6 +2,9 @@
 data/
 GMACMD
 
+# Data
+*.nc
+
 # Matlab
 *.asv
 

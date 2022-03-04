@@ -43,23 +43,23 @@ meta_outfile = '../data/internal/mooring_metadata.mat';
 
 % Search by latitude (degrees north in [-90,90]):
 criteria.chlat = 1;
-criteria.lat_min = 20;
-criteria.lat_max = 70;
+criteria.lat_min = -90;
+criteria.lat_max = 90;
 
 % Seach by longitude (degrees east in [0,360)):
 criteria.chlon = 1;
-criteria.lon_min = 120;
-criteria.lon_max = 240;
+criteria.lon_min = 0;
+criteria.lon_max = 360;
 
 % Search by time range (see "help datenum" in matlab):
 % No records to begin after time_max; no records to end before time_min.
 criteria.chtime = 1;
-criteria.time_min = datenum(2000,1,1,0,0,0); 
+criteria.time_min = datenum(1993,1,1,0,0,0); 
 criteria.time_max = datenum(2021,12,31,0,0,0);
 
 % Seach by record length (days):
 criteria.chlength = 1;
-criteria.reclength_min = 120;
+criteria.reclength_min = 60;
 
 % Search by resolution (minutes) (if criteria.chdelt = 1, then time series
 % with irregular time vectors will still be selected if
@@ -79,7 +79,7 @@ criteria.depth_max = 200;
 % floor meta data variable is NaN):
 criteria.chseafloor = 1;
 criteria.chseafloor_nan = 1;
-criteria.seafloor_min = 300;
+criteria.seafloor_min = 1000;
 criteria.seafloor_max = 30000;
 
 % Search by instrument height above sea floor (meters):
@@ -95,7 +95,7 @@ criteria.height_min = 0;
 % 3 = w, 
 % 4 = pressure, etc.
 % (See 'Var_def' in metadata.)
-criteria.wantvars = [1,2];
+criteria.wantvars = [1, 2];
 
 % 4. REDUNDANCY PROTOCAL
 % Should script check for redundant records?
@@ -153,6 +153,7 @@ criteria.topoflag = 2;
 % 5. PARAMETERS:
 eps.xy = 0.005;      % the tolerance for deciding if two instruments
                      % are at the same location, in degrees E or N (~200m)
+eps.t = 0.01;        % time tolerance in days for beginning and end times
 eps.z = 2;           % the tolerance for deciding if two instruments
                      % are at the same depth
 qc_tol.len = 20;     % section length in days used in quality control
