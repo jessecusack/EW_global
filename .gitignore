@@ -1,7 +1,6 @@
-# Misc
+# Directories
 data/
-figures/
-scratch/
+GMACMD
 
 # IDEs
 .DS_Store

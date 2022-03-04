@@ -15,3 +15,5 @@ dependencies:
 - cmocean
 - tqdm
 - cartopy=0.20.*
+- pydap=3.3.*
+- lxml=4.8.*
