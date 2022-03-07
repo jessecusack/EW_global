@@ -5,7 +5,7 @@ gmacmdroot = fullfile(pwd, '../');
 
 meta = load('../data/internal/mooring_metadata.mat');
 
-imooring = 44;
+imooring = 88;
 ninst = meta.Mooring_ninst(imooring);
 
 file_number = meta.Mooring_instruments(imooring, 1:ninst);
@@ -16,6 +16,15 @@ I0 = load(fullfile(gmacmdroot, files{1}));
 M.time = get_time_vector(I0.begintime, I0.endtime, I0.increment, I0.u);
 ntime = length(M.time);
 
+% Change longitude origin if necessary
+lon = I0.longitude;
+if lon > 180
+    lon = lon - 360;
+end
+
+M.bdepth = I0.sfdepth;
+M.lon = lon;
+M.lat = I0.latitude;
 M.depth = NaN(1, ninst);
 M.u = NaN(ntime, ninst);
 M.v = NaN(ntime, ninst);
@@ -42,6 +51,10 @@ end
 
 ncfn = 'test.nc';
 
+if isfile(ncfn)
+    delete(ncfn)
+end
+
 nccreate(ncfn, 'lon');
 nccreate(ncfn, 'lat');
 nccreate(ncfn, 'bdepth');
@@ -54,17 +67,17 @@ nccreate(ncfn, 'v', ...
          'Dimensions', {'time', ntime, 'depth', ninst}, ...
          'FillValue', NaN);
 
-ncwrite(ncfn, 'bdepth', I0.sfdepth);
+ncwrite(ncfn, 'bdepth', M.bdepth);
 ncwriteatt(ncfn, 'bdepth', 'long_name', 'bottom depth')
 ncwriteatt(ncfn, 'bdepth', 'standard_name', 'sea_floor_depth_below_sea_surface')
 ncwriteatt(ncfn, 'bdepth', 'units', 'm')
 
-ncwrite(ncfn, 'lon', I0.longitude);
+ncwrite(ncfn, 'lon', M.lon);
 ncwriteatt(ncfn, 'lon', 'long_name', 'longitude')
 ncwriteatt(ncfn, 'lon', 'standard_name', 'longitude')
 ncwriteatt(ncfn, 'lon', 'units', 'degree_east')
 
-ncwrite(ncfn, 'lat', I0.latitude);
+ncwrite(ncfn, 'lat', M.lat);
 ncwriteatt(ncfn, 'lat', 'long_name', 'latitude')
 ncwriteatt(ncfn, 'lat', 'standard_name', 'latitude')
 ncwriteatt(ncfn, 'lat', 'units', 'degree_north')
