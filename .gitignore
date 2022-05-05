@@ -1,9 +1,15 @@
+# macOS
+.DS_Store
+
 # Directories
-data/
+data/external
+data/internal
 GMACMD
 
 # Data
 *.nc
+*.mat
+*.csv
 
 # Matlab
 *.asv
