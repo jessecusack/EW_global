@@ -68,7 +68,7 @@ ax.quiver(ds_.longitude, ds_.latitude, ds_.uo, ds_.vo, transform=ccrs.PlateCarre
 # https://resources.marine.copernicus.eu/product-detail/SEALEVEL_GLO_PHY_L4_MY_008_047/INFORMATION
 
 # %%
-DATASET_ID = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D" # "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D"
+DATASET_ID = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D"
 
 # cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1M
 ds2 = xr.open_dataset(cm.copernicusmarine_datastore(DATASET_ID, USERNAME, PASSWORD))
@@ -93,6 +93,40 @@ ax.coastlines()
 ax.gridlines(draw_labels=True)
 
 ax.quiver(ds_.longitude, ds_.latitude, ds_.ugos, ds_.vgos, transform=ccrs.PlateCarree())
+
+# %% [markdown]
+# # Glorys 1/12 degree reanalysis
+#
+# https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/INFORMATION
+
+# %%
+DATASET_ID = "cmems_mod_glo_phy_my_0.083_P1D-m"
+
+# cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1M
+ds3 = xr.open_dataset(cm.copernicusmarine_datastore(DATASET_ID, USERNAME, PASSWORD))
+ds3
+
+# %%
+lon_slice = slice(-85, -55)
+lat_slice = slice(30, 50)
+lon_step = 3
+lat_step = 3
+date = "2011-09-05T12:00"
+depth = 1
+
+ds_ = ds3.isel(longitude=slice(0, None, lon_step), latitude=slice(0, None, lat_step))
+ds_ = ds_.sel(time=date, depth=depth, method="nearest").sel(longitude=lon_slice, latitude=lat_slice)
+ds_
+
+fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+
+# make the map global rather than have it zoom in to
+# the extents of any plotted data
+ax.set_extent((lon_slice.start, lon_slice.stop, lat_slice.start, lat_slice.stop))
+ax.coastlines()
+ax.gridlines(draw_labels=True)
+
+ax.quiver(ds_.longitude, ds_.latitude, ds_.uo, ds_.vo, transform=ccrs.PlateCarree())
 
 
 # %% [markdown]
