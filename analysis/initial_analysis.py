@@ -2,15 +2,15 @@
 # jupyter:
 #   jupytext:
 #     formats: ipynb,py:percent
+#     notebook_metadata_filter: -jupytext.text_representation.jupytext_version
 #     text_representation:
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.5.1
 #   kernelspec:
-#     display_name: global-ew
+#     display_name: ewglobal
 #     language: python
-#     name: global-ew
+#     name: ewglobal
 # ---
 
 # %% [markdown]
