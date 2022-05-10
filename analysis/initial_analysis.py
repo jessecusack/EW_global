@@ -108,7 +108,9 @@ axs[1].semilogx(freq2, Puv2.real, "C0")
 f_mean = gsw.f(ds_.lat[i0:i1].mean())*86400/(np.pi*2)
 
 for ax in axs:
+    ax.axvline(f_mean*0.75, color="gray")
     ax.axvline(f_mean, color="k")
-    ax.axvline(1/T_M2, color="gray")
+    ax.axvline(f_mean*1.25, color="gray")
+    ax.axvline(1/T_M2, color="r")
 
 # %%
