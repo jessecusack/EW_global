@@ -9,7 +9,7 @@ dat = io.loadmat("external/hourly_GPS_1.04.mat", simplify_cells=True)
 
 use = np.isfinite(dat["ID"])
 
-ID = dat["ID"][use].astype(int)
+ID = dat["ID"][use].astype("int32")
 TIME = np.datetime64("1979-01-01") + dat["TIME"][use].astype(int).astype("timedelta64[h]")
 
 data_vars = dict(

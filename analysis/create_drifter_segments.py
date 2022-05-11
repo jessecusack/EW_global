@@ -18,7 +18,7 @@
 #
 # The drifter data consist of many tracks from individual drifters. For each drifter, we want to split its track into several segments to be analysed separately. Each segment should be sufficiently long to estimate some quantities of both the near-inertial wave field and the eddy field. We might want to capture 4 inertial periods, for example.
 #
-# A problem is that we don't know how many segments we need to create. 
+# A problem is that we don't know how many segments we need to create and that segment length will depend on latitude.
 
 # %%
 import xarray as xr
@@ -57,6 +57,7 @@ ax.plot(ds.ID)
 
 # %%
 latamin = 10  # Absolute minimum latitude
+ceil_to_2powx = False
 
 def win_length(f, IP=4, dt=3600., ceil_to_2powx=True):
     """
@@ -145,6 +146,7 @@ idxs = np.hstack((0, np.nonzero(np.diff(ds.ID.data))[0] + 1, ds.ID.size))
 
 segment_start_idxs = []
 segment_lengths = []
+segment_ID = np.full(ds.ID.shape, -1, "int32")
 
 for i in tqdm(range(ds.ID_unique.size)):
     ID = ds.ID_unique[i].data
@@ -160,11 +162,12 @@ for i in tqdm(range(ds.ID_unique.size)):
         continue
         
     for j in range(50000):  # This range sets an upper limit
-        nwin, enough_data_remains = check_data_remaining(dsi.lat[ic:].data)
+        nwin, enough_data_remains = check_data_remaining(dsi.lat[ic:].data, ceil_to_2powx=ceil_to_2powx)
         
         if enough_data_remains:
             segment_start_idxs.append(idxs[i] + ic)
             segment_lengths.append(nwin)
+            segment_ID[idxs[i] + ic:idxs[i] + ic + nwin] = len(segment_lengths) - 1
             ic += nwin
             
             try:
@@ -180,8 +183,19 @@ for i in tqdm(range(ds.ID_unique.size)):
             break
             
             
-segs = xr.Dataset(dict(start_idxs=("segment", segment_start_idxs), lengths=("segment", segment_lengths)))
+segs = xr.Dataset(dict(start_idx=("segment", np.asarray(segment_start_idxs, "int32")), length=("segment", np.asarray(segment_lengths, "int32"))))
+
+ds["segment"] = ("ID", segment_ID, dict(long_name="segment number"))
+
+# %% [markdown]
+# Save outputs.
+
+# %%
 segs.to_netcdf("../data/internal/segments_hourly_GPS_1.04.nc")
+# To overwrite existing file, have to load data into ram...
+ds = ds.load()
+ds.close()
+ds.to_netcdf("../data/internal/hourly_GPS_1.04.nc")  
 
 # %% [markdown]
 # How many segments did we find?
@@ -194,16 +208,16 @@ segs.segment.size
 
 # %%
 fig, ax = plt.subplots()
-ax.plot(segs.start_idxs, '.')
+ax.plot(segs.start_idx, '.')
 
 fig, ax = plt.subplots()
-ax.plot(segs.lengths, '.')
+ax.plot(segs.length, '.')
 
 # %% [markdown]
 # Do any segments cover more than one float?
 
 # %%
-for i0, n in tqdm(zip(segs.start_idxs.data, segs.lengths.data)):
+for i0, n in tqdm(zip(segs.start_idx.data, segs.length.data)):
     if np.unique(ds.ID[i0:i0+n]).size > 1:
         raise RuntimeError(f"Oh no! Segment with start index = {i0} covers more than one float ID")
 
@@ -223,7 +237,9 @@ def check_segment(i, ds, start_idxs, lengths):
     print(f"np.unique(ID) = {np.unique(dsi.ID)}")
     
     fig, axs = plt.subplots(3, 1, figsize=(16, 20))
-    axs[0].plot(dsi.lon, dsi.lat)
+    axs[0].plot(dsi.lon, dsi.lat, "-o", ms=3)
+    axs[0].plot(dsi.lon[0], dsi.lat[0], "go", ms=10)
+    axs[0].plot(dsi.lon[-1], dsi.lat[-1], "ro", ms=10)
     dsi.u.plot(ax=axs[1], x="time", label="u")
     dsi.v.plot(ax=axs[1], x="time", label="v")
     axs[1].legend()
@@ -232,6 +248,4 @@ def check_segment(i, ds, start_idxs, lengths):
 
 
 # %%
-check_segment(100005, ds, segs.start_idxs.data, segs.lengths.data)
-
-# %%
+check_segment(5678, ds, segs.start_idx.data, segs.length.data)
