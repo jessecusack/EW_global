@@ -95,18 +95,23 @@ ax.coastlines()
 ax.add_feature(cartopy.feature.LAND)
 
 # %% [markdown]
+# ### Compute spectra
+#
 # Energy integrated in frequency...
 
 # %%
 welch_kwargs = dict(fs=24, window="hann", nperseg=dss.sample.size//2, detrend=False, axis=-1)
 
 freq, Puu = sig.welch(us, **welch_kwargs)
-freq, Pvv = sig.welch(vs, **welch_kwargs)
+_, Pvv = sig.welch(vs, **welch_kwargs)
+_, Cuv = sig.csd(us, vs, **welch_kwargs)
+Cuv = Cuv.real
 
 # %%
 dss["freq"] = freq
 dss["Suu"] = (["segment", "freq"], Puu)
 dss["Svv"] = (["segment", "freq"], Pvv)
+dss["Cuv"] = (["segment", "freq"], Cuv)
 dss["SKE"] = (["segment", "freq"], 0.5*(Puu + Pvv))
 dss["fcor"] = ("segment", gsw.f(dss.lat_av.data)*86400/(2*np.pi), dict(units="cpd"))
 
@@ -150,6 +155,8 @@ print(f"NI energy = {ENI:.6f} J kg-1")
 print(f"Ratio Ee/EIW = {Ee/ENI:.4f}")
 
 # %% [markdown]
+# ### Kinetic energy in frequency bands
+#
 # Near inertial KE and eddy KE for all spectra...
 
 # %%
@@ -178,8 +185,8 @@ dss["KEe"] = ("segment", KEe)
 dss["KEIW"] = ("segment", KEIW)
 
 # %%
-lon_bins = np.arange(0, 361, 1)
-lat_bins = np.arange(-90, 91, 1)
+lon_bins = np.arange(0, 362, 2)
+lat_bins = np.arange(-90, 92, 2)
 
 mask = np.abs(utils.mid(lat_bins)) < 10
 
@@ -217,6 +224,83 @@ for ax in axs:
     
     
 fig.savefig("../figures/low_freq_to_NI_energy_ratio.pdf", dpi=180, bbox_inches="tight", pad_inches=0.01)
+
+# %% [markdown]
+# ### Stress
+#
+# Integrate stresses in NI band
+
+# %%
+flo = 0.75  # Coriolis lower cut off
+fhi = 1.5  # coriolis upper cut off
+
+Suu = dss.Suu.data
+Svv = dss.Svv.data
+Cuv = dss.Cuv.data
+freq = dss.freq.data
+freqie = np.linspace(0, fe, 50)
+
+Suui = []
+Svvi = []
+Cuvi = []
+
+for i in tqdm(dss.segment.data):
+    # Integrate NI
+    freqi = np.linspace(flo*fcor, fhi*fcor, 50)
+    Suui.append(itgr.simpson(np.interp(freqi, freq, Suu[i]), freqi))
+    Svvi.append(itgr.simpson(np.interp(freqi, freq, Svv[i]), freqi))
+    Cuvi.append(itgr.simpson(np.interp(freqi, freq, Cuv[i]), freqi))
+    
+dss["Suui"] = ("segment", Suui)
+dss["Svvi"] = ("segment", Svvi)
+dss["Cuvi"] = ("segment", Cuvi)
+
+dss["nstress"] = dss.Suui - dss.Svvi
+dss["sstress"] = -2*dss.Cuvi
+
+# %% [markdown]
+# What does this stress look like?
+
+# %%
+trans = ccrs.PlateCarree()
+
+fig, axs = plt.subplots(2, 1, figsize=(25, 16), subplot_kw=dict(projection=ccrs.Robinson()))
+scm = axs[0].scatter(dss.lon_av, dss.lat_av, s=2, c=dss.nstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+fig.colorbar(scm, ax=axs[0])
+scm = axs[1].scatter(dss.lon_av, dss.lat_av, s=2, c=dss.sstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+fig.colorbar(scm, ax=axs[1])
+
+for ax in axs:
+    ax.coastlines()
+    ax.add_feature(cartopy.feature.LAND)
+
+# %%
+lon_bins = np.arange(0, 362, 2)
+lat_bins = np.arange(-90, 92, 2)
+
+mask = np.abs(utils.mid(lat_bins)) < 10
+
+nstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.nstress, bins=[lon_bins, lat_bins])
+nstress_bin[:, mask] = np.nan
+
+sstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.sstress, bins=[lon_bins, lat_bins])
+sstress_bin[:, mask] = np.nan
+
+# %%
+trans = ccrs.PlateCarree()
+
+fig, axs = plt.subplots(2, 1, figsize=(25, 16), subplot_kw=dict(projection=ccrs.Robinson()))
+pccm = axs[0].pcolormesh(lon_bins, lat_bins, nstress_bin.T, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+cb = fig.colorbar(pccm, ax=axs[0])
+cb.set_label("Normal stress [N m$^{-2}$]", fontsize=fontsize)
+
+pccm = axs[1].pcolormesh(lon_bins, lat_bins, sstress_bin.T, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+cb = fig.colorbar(pccm, ax=axs[1])
+cb.set_label("Shear stress [N m$^{-2}$]", fontsize=fontsize)
+
+for ax in axs:
+    ax.coastlines()
+    ax.add_feature(cartopy.feature.LAND)
 
 # %% [markdown]
 # ## Uneven segment analysis (slow)
