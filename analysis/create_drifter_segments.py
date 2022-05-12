@@ -313,5 +313,3 @@ dss
 
 # %%
 dss.to_netcdf("../data/internal/hourly_GPS_1.04_evenly_segmented.nc")
-
-# %%

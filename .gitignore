@@ -5,6 +5,7 @@
 data/external
 data/internal
 GMACMD
+figures
 
 # Data
 *.nc
