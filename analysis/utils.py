@@ -6,11 +6,92 @@ import scipy.signal as sig
 import scipy.io as io
 import scipy.stats as stats
 from datetime import datetime, timedelta
+import gsw
 
 
-class Bunch(object):
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+def ceil_to_2_power_x(y):
+    return 2**int(np.ceil(np.log2(y)))
+
+
+def win_length(f, IP=4, dt=3600., ceil_to_2powx=True):
+    """
+    Parameters
+    ----------
+        f : float
+            Coriolis frequency [rad s-1]
+        NI : int
+            Number of inertial periods needed in window.
+        dt : float, optional
+            Sampling period [s]
+        ceil_to_2powx : float, option
+            Do ceiling of result to nearest 2**x where x is an integer (e.g. for use with fft).
+            
+    returns
+        n : int
+            Number of samples in window.
+            
+    """
+    
+    # Inertial period [s]
+    Tf = np.pi*2/np.abs(f)
+    # Time needed [s]
+    T = IP*Tf
+    
+    if ceil_to_2powx:
+        n = ceil_to_2_power_x(T/dt)
+    else:
+        n = int(np.ceil(T/dt))
+    
+    return n
+
+
+def find_start_idx(lats, latamin):
+    """
+    Parameters
+    ----------
+        lats : ndarray
+            Array of latitudes [degrees_north]
+        latamin : float
+            Absolute minimum latitude [degrees]
+            
+    returns
+        idx : int
+            Number of samples in window.
+            
+    """
+    
+    lowlat = np.abs(lats[0]) < latamin
+    
+    if not lowlat:
+        return 0
+    
+    idx = np.argmax(np.abs(lats) > latamin)
+    if idx == 0:
+        raise RuntimeError("No latitude is above the absolute minimum")
+
+    return idx
+    
+    
+def check_data_remaining(lats, **win_length_kwargs):
+    """
+    Parameters
+    ----------
+        lats : ndarray
+            Array of latitudes [degrees_north]
+        **win_length_kwargs : dict, optional
+            Arguments to win_length.
+            
+    returns
+        n : int
+            Number of samples in window from function win_length.
+        data_remains : bool
+            True if enough data remains, otherwise False.
+            
+    """
+    
+    f = gsw.f(lats[0])
+    n = win_length(f, **win_length_kwargs)
+    return n, lats.size > n
 
 
 def wrapphase(x):
@@ -207,88 +288,6 @@ def mid(x, axis=0):
 def rotate(x, y, a):
     """Rotate vector (x, y) by an angle a."""
     return x * np.cos(a) + y * np.sin(a), -x * np.sin(a) + y * np.cos(a)
-
-
-def flip_padded(data, cols=None):
-    """Input an array of data. Receive flipped array. If array is two
-    dimensional then a list of columns should be provided else the whole matrix
-    will be flipped. This is different from the numpy.flipud function because
-    any end chunk of data won't be flipped, e.g.:
-
-    [1, 2, 3, nan, nan] -> [3, 2, 1, nan, nan]
-
-    also
-
-    [1, 2, nan, 4, nan, nan] -> [4, nan, 2, 1, nan, nan]
-
-    If data is 2D, assumes that each column contains a list of data otherwise
-    please transpose the input.
-
-    Sometimes data sets combine combine columns of different lengths and pad
-    out the empty space with nans. This is useful for flipping in that
-    situation.
-
-    """
-    out_data = data.copy()
-    d = np.ndim(data)
-
-    def flip(arr):
-        flip_arr = np.flipud(arr)
-        nnans = ~np.isnan(flip_arr)
-        idx = nnans.searchsorted(True)
-        #        try:
-        #            indx = next(i for i, el, in enumerate(flip_arr) if ~np.isnan(el))
-        #        except StopIteration:
-        #            return flip_arr
-        return np.concatenate((flip_arr[idx:], flip_arr[:idx]))
-
-    if d == 1 and cols is None:
-
-        out_data = flip(data)
-
-    elif d == 2 and cols is not None:
-
-        for col_indx, col in zip(cols, data[:, cols].T):
-            out_data[:, col_indx] = flip(col)
-
-    elif d == 2 and cols is None:
-
-        for col_indx, col in enumerate(data.T):
-            out_data[:, col_indx] = flip(col)
-
-    else:
-        raise RuntimeError("Inputs are probably wrong.")
-
-    return out_data
-
-
-def nansort(a, axis=-1, kind="quicksort"):
-    """Sort but leave NaN values untouched in place."""
-    if axis not in [-1, 0, 1]:
-        raise ValueError("The axis may be only -1, 0 or 1.")
-
-    ndim = np.ndim(a)
-
-    if ndim > 2:
-        raise ValueError("Only 1 or 2 dimensional arrays are supported.")
-
-    nans = np.isnan(a)
-    a_sorted = np.full_like(a, np.nan)
-    if ndim == 1:
-        a_valid = a[~nans]
-        a_sorted[~nans] = np.sort(a_valid, kind=kind)
-    if ndim == 2:
-        nr, nc = a.shape
-        if axis == 0:
-            for i in range(nc):
-                a_valid = a[~nans[:, i], i]
-                a_sorted[~nans[:, i], i] = np.sort(a_valid, kind=kind)
-        if axis == -1 or axis == 1:
-            for i in range(nr):
-                a_valid = a[i, ~nans[i, :]]
-                a_sorted[i, ~nans[i, :]] = np.sort(a_valid, kind=kind)
-
-    return a_sorted
 
 
 def nantrapz(y, x=None, dx=1.0, axis=0, xave=False):
@@ -994,125 +993,144 @@ def contiguous_regions(condition):
     return idx
 
 
-def butter(cutoff, fs, btype="low", order=4):
+def _butter(cutoff, fs=1.0, btype="low", order=4):
     """Return Butterworth filter coefficients. See scipy.signal.butter for a
     more thorough documentation.
 
     Parameters
     ----------
-    cutoff : array
+    cutoff : array_like
         Cutoff frequency, e.g. roughly speaking, the frequency at which the
         filter acts. Units should be same as for fs paramter.
-    fs : float
+    fs : float, optional
         Sampling frequency of signal. Units should be same as for cutoff
-        parameter.
+        parameter. Default is 1.0.
     btype : {‘lowpass’, ‘highpass’, ‘bandpass’, ‘bandstop’}, optional
         Default is 'low'.
-    order : optional, int
+    order : int, optional
         Default is 4. The order of the Butterworth filter.
 
     Returns
     -------
-    b : numpy array
-        Filter b coefficients.
-    a : numpy array
-        Filter a coefficients.
+    sos : ndarray
+        Filter coefficients.
 
     """
     cutoff = np.asarray(cutoff)
-    nyq = 0.5 * fs
+    nyq = 0.5 * fs  # Nyquist frequency
     normal_cutoff = cutoff / nyq
-    b, a = sig.butter(order, normal_cutoff, btype=btype, analog=False)
-    return b, a
+    sos = sig.butter(order, normal_cutoff, btype=btype, analog=False, output="sos")
+    return sos
 
 
-def butter_filter(x, cutoff, fs, btype="low", order=4, **kwargs):
-    """Apply Butterworth filter to data using scipy.signal.filtfilt.
+def butter_filter(y, cutoff, fs=1.0, btype="low", order=4, **kwargs):
+    """Apply Butterworth filter to data using scipy.signal.sosfiltfilt.
 
     Parameters
     ----------
-    x : array
-        The data to be filtered. Should be evenly sampled.
-    cutoff : array
+    y : array_like
+        The data to be filtered. Must be evenly sampled.
+    cutoff : array_like
         Cutoff frequency, e.g. roughly speaking, the frequency at which the
         filter acts. Units should be same as for fs paramter.
-    fs : float
+    fs : float, optional
         Sampling frequency of signal. Units should be same as for cutoff
-        parameter.
-    btype : optional, string
-        Default is 'low'. Filter type can be 'low', 'high' or 'band'.
-    order : optional, int
+        parameter. Default is 1.0.
+    btype : {‘lowpass’, ‘highpass’, ‘bandpass’, ‘bandstop’}, optional
+        Default is 'low'.
+    order : int, optional
         Default is 4. The order of the Butterworth filter.
+    kwargs : optional
+        Additional key word arguments passed to sosfiltfilt.
 
     Returns
     -------
-    y : numpy array
+    y_filt : ndarray
         The filtered data.
 
     """
-    b, a = butter(cutoff, fs, btype=btype, order=order)
-    y = sig.filtfilt(b, a, x, **kwargs)
-    return y
+    sos = _butter(cutoff, fs=fs, btype=btype, order=order)
+    y_filt = sig.sosfiltfilt(sos, np.asarray(y), **kwargs)
+    return y_filt
 
 
-def nan_butter_filter(x, cutoff, fs, axis=1, btype="low", order=4, dic=20, **kwargs):
-    """Apply Butterworth filter to data using scipy.signal.filtfilt for 2D array
-    along the given axis. Can handle some NaN values and 2D arrays.
+def nan_butter_filter(
+    y, cutoff, fs=1.0, axis=1, btype="low", order=4, dic=20, **kwargs
+):
+    """Apply Butterworth filter to data using scipy.signal.sosfiltfilt
+    along the given axis. It can skip over some NaN regions.
 
     Parameters
     ----------
-    x : array
-        The data to be filtered. Should be evenly sampled.
-    cutoff : array
+    y : array_like
+        The data to be filtered. Must be evenly sampled.
+    cutoff : array_like
         Cutoff frequency, e.g. roughly speaking, the frequency at which the
         filter acts. Units should be same as for fs paramter.
-    fs : float
+    fs : float, optional
         Sampling frequency of signal. Units should be same as for cutoff
-        parameter.
-    axis : optional, int
+        parameter. Default is 1.0.
+    axis : int, optional
         Axis along which to perform operation, default is 1.
-    btype : optional, string
-        Default is 'low'. Filter type can be 'low', 'high' or 'band'.
-    order : optional, int
+    btype : {‘lowpass’, ‘highpass’, ‘bandpass’, ‘bandstop’}, optional
+        Default is 'low'.
+    order : int, optional
         Default is 4. The order of the Butterworth filter.
-    dic : optional, int
+    dic : int, optional
         Smallest contiguous region size, in number of data points, over which
         to perform the filtering. Default is 20.
+    kwargs : optional
+        Additional key word arguments passed to sosfiltfilt.
 
     Returns
     -------
-    y : numpy array
+    y_filt : ndarray
         The filtered data.
 
     """
-    ndim = np.ndim(x)
-    y = np.full_like(x, np.nan)
-
-    def _filthelp(x_, cutoff, fs, btype, order, dic, **kwargs):
-        y_ = np.full_like(x_, np.nan)
-        nans = np.isnan(x_)
+    # TODO: determine dic from fs and cutoff.
+    # TODO: Have a second option of filling NaN by interpolation before filtering.
+    def discontinuous_filter(x, cutoff, fs, btype, order, dic, **kwargs):
+        nans = np.isnan(x)
         if nans.any():
+            x_filt = np.full_like(x, np.nan)
             idxs = contiguous_regions(~nans)
             di = idxs[:, 1] - idxs[:, 0]
             iidxs = np.argwhere(di > dic)
             for j in iidxs[:, 0]:
-                sl = slice(*idxs[j, :])
-                y_[sl] = butter_filter(x_[sl], cutoff, fs, btype, **kwargs)
-        else:
-            y_ = butter_filter(x_, cutoff, fs, btype, **kwargs)
-        return y_
 
-    if ndim == 1:
-        y = _filthelp(x, cutoff, fs, btype, order, dic, **kwargs)
-    if ndim == 2:
-        nr, nc = x.shape
-        if axis == 0:
-            for i in range(nc):
-                y[:, i] = _filthelp(x[:, i], cutoff, fs, btype, order, dic, **kwargs)
-        if axis == -1 or axis == 1:
-            for i in range(nr):
-                y[i, :] = _filthelp(x[i, :], cutoff, fs, btype, order, dic, **kwargs)
-        return y
+                sl = slice(*idxs[j, :])
+                x_filt[sl] = butter_filter(x[sl], cutoff, fs, btype, **kwargs)
+        else:
+            x_filt = butter_filter(x, cutoff, fs, btype, **kwargs)
+
+        return x_filt
+
+    y_filt = np.apply_along_axis(
+        discontinuous_filter,
+        axis,
+        np.asarray(y),
+        cutoff,
+        fs,
+        btype,
+        order,
+        dic,
+        **kwargs
+    )
+
+    return y_filt
+
+
+def nan_butter_filter_renan(
+    y, cutoff, fs=1.0, axis=1, btype="low", order=4, dic=20, **kwargs
+):
+    """See documentation for nan_butter_filter. This function adds the NaN
+    values back after filtering."""
+    # TODO: Make a decorator for this
+    nans = np.isnan(y)
+    y_filt = nan_butter_filter(y, cutoff, fs, axis, btype, order, dic, **kwargs)
+    y_filt[nans] = np.nan
+    return y_filt
 
 
 def bin_data(x, bins, x_monotonic=True):
