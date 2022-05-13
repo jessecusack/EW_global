@@ -30,4 +30,21 @@ Create an account: https://marine.copernicus.eu/
 ./install_environment.sh
 ```
 
-2) Run some preliminary mooring processing scripts. 
+### Drifter analysis
+
+Download and convert the drifter data.
+
+```bash
+cd data
+./get_drifter_data.sh
+conda activate ewglobal
+python convert_drifter_mat_to_nc.py
+```
+
+### Mooring analysis
+
+Link the mooring data folder.
+
+```bash
+ln -s /your/path/to/GMACMD GMACMD
+```
