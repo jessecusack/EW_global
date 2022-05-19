@@ -31,6 +31,7 @@
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import from_levels_and_colors
 import cartopy
 import cartopy.crs as ccrs
 from scipy import stats
@@ -79,20 +80,31 @@ ax.coastlines()
 ax.add_feature(cartopy.feature.LAND)
 
 # %%
-lon_bins = np.arange(0, 361, 1)
-lat_bins = np.arange(-90, 91, 1)
+dl = 2
+lon_bins = np.arange(0, 360 + dl, dl)
+lat_bins = np.arange(-80, 90 + dl, dl)
 
 KE_av_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.KE_av, bins=[lon_bins, lat_bins])
 KE_av_bin[:, np.abs(utils.mid(lat_bins)) < 10] = np.nan
 
+counts, _, _ = np.histogram2d(dss.lon_av, dss.lat_av, [lon_bins, lat_bins], density=False)
+counts[counts == 0] = np.nan
+
 # %%
 trans = ccrs.PlateCarree()
 
-fig, ax = plt.subplots(1, 1, figsize=(25, 8), subplot_kw=dict(projection=ccrs.Robinson()))
-pccm = ax.pcolormesh(lon_bins, lat_bins, KE_av_bin.T, transform=trans, vmin=0, vmax=0.25)
-fig.colorbar(pccm, ax=ax)
-ax.coastlines()
-ax.add_feature(cartopy.feature.LAND)
+fig, axs = plt.subplots(2, 1, figsize=(25, 16), subplot_kw=dict(projection=ccrs.Robinson()))
+pccm = axs[0].pcolormesh(lon_bins, lat_bins, KE_av_bin.T, transform=trans, vmin=0, vmax=0.25)
+fig.colorbar(pccm, ax=axs[0])
+axs[0].coastlines()
+axs[0].add_feature(cartopy.feature.LAND)
+
+
+cmap, norm = from_levels_and_colors([1, 2, 5, 10, 20, 50], ['C0', 'C1', 'C2', 'C3', 'C4', 'C5'], extend="max")
+pccm = axs[1].pcolormesh(lon_bins, lat_bins, counts.T, transform=trans, norm=norm, cmap=cmap)
+fig.colorbar(pccm, ax=axs[1])
+axs[1].coastlines()
+axs[1].add_feature(cartopy.feature.LAND)
 
 # %% [markdown]
 # ### Compute spectra
@@ -116,7 +128,7 @@ dss["SKE"] = (["segment", "freq"], 0.5*(Puu + Pvv))
 dss["fcor"] = ("segment", gsw.f(dss.lat_av.data)*86400/(2*np.pi), dict(units="cpd"))
 
 # %%
-i = 47293
+i = 1000
 flo = 0.75  # Coriolis lower cut off
 fhi = 1.5  # coriolis upper cut off
 fe = 0.25  # Eddy cut off
