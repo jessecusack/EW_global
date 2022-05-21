@@ -1375,3 +1375,53 @@ def etrapz(ey, x):
     dx = np.diff(x)
     eys = 0.5*dx*esuma(np.stack((ey[:-1], ey[1:]), axis=1), axis=1)
     return esuma(eys)
+
+
+def trilinear(xyzdata, datas, xyzi):
+    '''
+    xyzdata: array of data coordinates
+    datas: iterable of 3d volumes of data
+    xyzi: interpolation points
+    returns: tuple of interpolated data
+    Trilinear interpolation function modified from: https://neurostars.org/t/trilinear-interpolation-in-python/18019
+    '''
+    
+    def extract_vertices(i, j, k, data):
+        V000 = data[ i   , j   ,  k   ]
+        V100 = data[(i+1), j   ,  k   ]
+        V010 = data[ i   ,(j+1),  k   ]
+        V001 = data[ i   , j   , (k+1)]
+        V101 = data[(i+1), j   , (k+1)]
+        V011 = data[ i   ,(j+1), (k+1)]
+        V110 = data[(i+1),(j+1),  k   ]
+        V111 = data[(i+1),(j+1), (k+1)]
+        return np.stack((V000, V100, V010, V001, V101, V011, V110, V111), axis=-1)
+    
+    def calculate_weights(dx, dy, dz):
+        W000 = (1 - dx)*(1 - dy)*(1 - dz)
+        W100 = dx * (1 - dy) * (1 - dz)
+        W010 = (1 - dx) * dy * (1 - dz)
+        W001 = (1 - dx) * (1 - dy) * dz
+        W101 = dx * (1 - dy) * dz
+        W011 = (1 - dx) * dy * dz
+        W110 = dx * dy * (1 - dz)
+        W111 = dx * dy * dz
+        return np.stack((W000, W100, W010, W001, W101, W011, W110, W111), axis=-1)
+    
+    x, y, z = xyzdata[0], xyzdata[1], xyzdata[2]
+    xi, yi, zi = xyzi[0], xyzi[1], xyzi[2]
+    
+    i = np.searchsorted(x, xi) - 1
+    j = np.searchsorted(y, yi) - 1
+    k = np.searchsorted(z, zi) - 1
+    
+    dx = (xi - x[i])/(x[i+1] - x[i])
+    dy = (yi - y[j])/(y[j+1] - y[j])
+    dz = (zi - z[k])/(z[k+1] - z[k])
+    
+    W = calculate_weights(dx, dy, dz)
+    
+    out = tuple([np.sum(extract_vertices(i, j, k, data)*W, axis=-1) for data in datas])
+    
+    return out
+

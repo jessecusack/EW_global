@@ -13,10 +13,12 @@ dependencies:
 - gsw=3.*
 - netcdf4=1.5.*
 - cmocean
-- tqdm
+- tqdm=4.*
 - cartopy=0.20.*
 - pydap=3.3.*
 - lxml=4.8.*
 - jupytext
+- dask=2022.*
+# - xgcm=0.7.*
 # - pip: 
     # - global-land-mask

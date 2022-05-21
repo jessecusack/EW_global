@@ -19,11 +19,17 @@
 # %%
 import xarray as xr
 import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import getpass
 import copernicusmarine as cm
 import numpy as np
+import utils
+
+# %% [markdown]
+# # VIA OPENDAP IS TOO SLOW
+#
+# ### But you can still run it this way here. I switched to a downloaded version of the data. Download is done by [this script](../processing_scripts/download_GLORYS.py)
+#
+#
 
 # %%
 USERNAME = 'jcusack1'
@@ -47,7 +53,7 @@ gdp = xr.open_dataset("../data/internal/hourly_GPS_1.04_evenly_segmented.nc")
 gdp
 
 # %%
-seg = gdp.isel(segment=12430)
+seg = gdp.isel(segment=1000)
 seg
 
 # %%
@@ -87,9 +93,6 @@ ds_
 # Strain?
 
 # %%
-import utils
-
-# %%
 dudx, dudy = utils.spherical_polar_gradient_ts(ds_.uo.data, ds_.longitude.data, ds_.latitude.data)
 dvdx, dvdy = utils.spherical_polar_gradient_ts(ds_.vo.data, ds_.longitude.data, ds_.latitude.data)
 
@@ -100,9 +103,6 @@ ds_["dvdx"] = (["time", "latitude", "longitude"], dvdx)
 ds_["nstrain"] = (["time", "latitude", "longitude"], dudx - dvdy)
 ds_["sstrain"] = (["time", "latitude", "longitude"], dvdx + dudy)
 
-
-# %%
-ds_
 
 # %%
 dsi = ds_.interp(dict(longitude=seg.lon, latitude=seg.lat, time=seg.time))
@@ -119,5 +119,3 @@ fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(dsi.time, dsi.nstrain, "C0", label="normal strain")
 ax.plot(dsi.time, dsi.sstrain, "C1", label="shear strain")
 ax.legend()
-
-# %%
