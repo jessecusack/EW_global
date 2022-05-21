@@ -17,15 +17,13 @@
 # # Quantities (velocity, stress, etc) on drifter segments
 
 # %% [markdown]
-# Eddy wave decomposition:
+# Eddy wave decomposition is done spectrally, e.g. 
 #
 # \begin{equation}
-# E_e = \int_{\omega_l}^{f/2} E(\omega) d\omega
+# Q = \int_{\omega_0}^{\omega_1} S(\omega) d\omega
 # \end{equation}
 #
-# \begin{equation}
-# E_w = \int_{f/2}^{2f} E(\omega) d\omega
-# \end{equation}
+# Where Q is the integrated quantity (e.g. energy in a given frequency band), computed by integrating the spectrum (e.g energy spectrum) over the frequencies associated with the process of interest. In the case of eddies $\omega_0 = 0$ and $\omega_1 = 0.25$ cpd. For near-inertial waves, we can take $\omega_0 = 0.75f$ and $\omega_1 = 1.5f$, for example.
 
 # %%
 import xarray as xr
@@ -48,6 +46,14 @@ K1 = 24/23.93447213  # K1 frequency
 # %autoreload 2
 
 # %% [markdown]
+# Global parameters
+
+# %%
+fhi = 1.25  # coriolis upper cut off
+flo = 1/fhi  # Coriolis lower cut off
+fe = 0.25  # Eddy cut off
+
+# %% [markdown]
 # ## Even segment analysis
 
 # %%
@@ -59,22 +65,16 @@ dss = xr.open_dataset("../data/internal/hourly_GPS_1.04_evenly_segmented.nc")
 # %%
 us = dss.u.data
 vs = dss.v.data
-lons = dss.lon.data
-lats = dss.lat.data
 
 KE_av = np.average(0.5*(us**2 + vs**2), axis=1, weights=sig.hann(dss.sample.size))
-lon_av = stats.circmean(lons, 360, 0, axis=1)
-lat_av = stats.circmean(lats, 90, -90, axis=1)
 
-dss["KE_av"] = ("segment", KE_av)
-dss["lon_av"] = ("segment", lon_av)
-dss["lat_av"] = ("segment", lat_av)
+dss["KE_mean"] = ("segment", KE_av)
 
 # %%
 trans = ccrs.PlateCarree()
 
 fig, ax = plt.subplots(1, 1, figsize=(25, 8), subplot_kw=dict(projection=ccrs.Robinson()))
-scm = ax.scatter(dss.lon_av, dss.lat_av, s=2, c=dss.KE_av, transform=trans, vmin=0, vmax=0.25)
+scm = ax.scatter(dss.lon_mean, dss.lat_mean, s=2, c=dss.KE_mean, transform=trans, vmin=0, vmax=0.25)
 fig.colorbar(scm, ax=ax)
 ax.coastlines()
 ax.add_feature(cartopy.feature.LAND)
@@ -84,17 +84,17 @@ dl = 2
 lon_bins = np.arange(0, 360 + dl, dl)
 lat_bins = np.arange(-80, 90 + dl, dl)
 
-KE_av_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.KE_av, bins=[lon_bins, lat_bins])
-KE_av_bin[:, np.abs(utils.mid(lat_bins)) < 10] = np.nan
+KE_mean_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.KE_mean, bins=[lon_bins, lat_bins])
+# KE_mean_bin[:, np.abs(utils.mid(lat_bins)) < 10] = np.nan
 
-counts, _, _ = np.histogram2d(dss.lon_av, dss.lat_av, [lon_bins, lat_bins], density=False)
+counts, _, _ = np.histogram2d(dss.lon_mean, dss.lat_mean, [lon_bins, lat_bins], density=False)
 counts[counts == 0] = np.nan
 
 # %%
 trans = ccrs.PlateCarree()
 
 fig, axs = plt.subplots(2, 1, figsize=(25, 16), subplot_kw=dict(projection=ccrs.Robinson()))
-pccm = axs[0].pcolormesh(lon_bins, lat_bins, KE_av_bin.T, transform=trans, vmin=0, vmax=0.25)
+pccm = axs[0].pcolormesh(lon_bins, lat_bins, KE_mean_bin.T, transform=trans, vmin=0, vmax=0.25)
 fig.colorbar(pccm, ax=axs[0])
 axs[0].coastlines()
 axs[0].add_feature(cartopy.feature.LAND)
@@ -125,15 +125,13 @@ dss["Suu"] = (["segment", "freq"], Puu)
 dss["Svv"] = (["segment", "freq"], Pvv)
 dss["Cuv"] = (["segment", "freq"], Cuv)
 dss["SKE"] = (["segment", "freq"], 0.5*(Puu + Pvv))
-dss["fcor"] = ("segment", gsw.f(dss.lat_av.data)*86400/(2*np.pi), dict(units="cpd"))
 
 # %%
-i = 1000
-flo = 0.75  # Coriolis lower cut off
-fhi = 1.5  # coriolis upper cut off
-fe = 0.25  # Eddy cut off
+i = 84939
 
-fcor = np.abs(dss.fcor[i])
+seg = dss.isel(segment=i)
+
+fcor = np.abs(seg.f_mean)*86400/(np.pi*2)
 
 fig, ax = plt.subplots(figsize=(10, 10))
 ax.set_xlabel("Frequency [cpd]")
@@ -141,27 +139,42 @@ ax.set_ylabel("KE spectral density [J kg$^{-1}$ cpd$^{-1}$]")
 
 # ax.loglog(freq, Puu[i, :])
 # ax.loglog(freq, Pvv[i, :])
-ax.loglog(dss.freq, dss.SKE[i])
-ax.axvline(fcor, color="k")
-ax.axvline(M2, color="r")
-ax.axvline(K1, color="b")
+ax.loglog(seg.freq, seg.SKE)
+ax.axvline(fcor, color="k", label="$f$")
+ax.axvline(M2, color="r", label="$M_2$")
+ax.axvline(K1, color="b", label="$K_1$")
 ax.set_ylim(1e-6, 1)
 ax.set_xlim(1e-2, 10)
 
 ax.fill_betweenx(ax.get_ylim(), 2*[flo*fcor], 2*[fhi*fcor], alpha=0.3, color="gray")
 ax.fill_betweenx(ax.get_ylim(), 2*[0], 2*[fe], alpha=0.3, color="gray")
 
+ax.legend()
+
+step = 10
+fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection=ccrs.Mercator()))
+ax.plot(seg.lon, seg.lat, "-o", transform=ccrs.PlateCarree(), ms=1)
+ax.quiver(seg.lon[::step], seg.lat[::step], seg.u[::step], seg.v[::step], transform=ccrs.PlateCarree(), color="k")
+ax.quiver(seg.lon[::step], seg.lat[::step], seg.ug[::step], seg.vg[::step], transform=ccrs.PlateCarree(), color="r")
+ax.gridlines(draw_labels=True, linewidth=0.5, color='k', alpha=0.5, linestyle='--')
+
+fig, ax = plt.subplots()
+ax.plot(np.diff(seg.time).astype("timedelta64[h]"), "o", ms=1)
+ax.set_ylabel("Diff of time")
+
 # Integrate eddy
 freqi = np.linspace(0, fe, 50)
-Ei = np.interp(freqi, dss.freq, dss.SKE[i])
+Ei = np.interp(freqi, seg.freq, seg.SKE)
 Ee = itgr.simpson(Ei, freqi)
 
 # Integrate NI
 freqi = np.linspace(flo*fcor, fhi*fcor, 50)
-Ei = np.interp(freqi, dss.freq, dss.SKE[i])
+Ei = np.interp(freqi, seg.freq, seg.SKE)
 ENI = itgr.simpson(Ei, freqi)
 
-print(f"Mean position = {dss.lat_av[i].data:.1f} N, {dss.lon_av[i].data:.1f} E")
+print(f"ID {seg.ID.data}")
+print(f"Time gap detected? {seg.time_flag.data}")
+print(f"Mean position = {seg.lat_mean.data:.1f} N, {seg.lon_mean.data:.1f} E")
 print(f"Eddy energy = {Ee:.6f} J kg-1")
 print(f"NI energy = {ENI:.6f} J kg-1")
 print(f"Ratio Ee/EIW = {Ee/ENI:.4f}")
@@ -172,11 +185,8 @@ print(f"Ratio Ee/EIW = {Ee/ENI:.4f}")
 # Near inertial KE and eddy KE for all spectra...
 
 # %%
-flo = 0.75  # Coriolis lower cut off
-fhi = 1.5  # coriolis upper cut off
-fe = 0.25  # Eddy cut off
-
 SKE = dss.SKE.data
+fcor = np.abs(dss.f_mean)*86400/(np.pi*2)
 freq = dss.freq.data
 freqie = np.linspace(0, fe, 50)
 
@@ -189,7 +199,7 @@ for i in tqdm(dss.segment.data):
     KEe.append(itgr.simpson(Ei, freqi))
 
     # Integrate NI
-    freqi = np.linspace(flo*fcor, fhi*fcor, 50)
+    freqi = np.linspace(flo*fcor[i], fhi*fcor[i], 50)
     Ei = np.interp(freqi, freq, SKE[i])
     KEIW.append(itgr.simpson(Ei, freqi))
     
@@ -197,19 +207,20 @@ dss["KEe"] = ("segment", KEe)
 dss["KEIW"] = ("segment", KEIW)
 
 # %%
-lon_bins = np.arange(0, 362, 2)
-lat_bins = np.arange(-90, 92, 2)
+dl = 2
+lon_bins = np.arange(0, 360 + dl, dl)
+lat_bins = np.arange(-90, 90 + dl, dl)
 
-mask = np.abs(utils.mid(lat_bins)) < 10
+mask = np.abs(utils.mid(lat_bins)) < 7.5
 
-KEe_av_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.KEe, bins=[lon_bins, lat_bins])
-KEe_av_bin[:, mask] = np.nan
+KEe_mean_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.KEe, bins=[lon_bins, lat_bins])
+KEe_mean_bin[:, mask] = np.nan
 
-KEIW_av_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.KEIW, bins=[lon_bins, lat_bins])
-KEIW_av_bin[:, mask] = np.nan
+KEIW_mean_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.KEIW, bins=[lon_bins, lat_bins])
+KEIW_mean_bin[:, mask] = np.nan
 
-G_av_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.KEe/dss.KEIW, bins=[lon_bins, lat_bins])
-G_av_bin[:, mask] = np.nan
+G_mean_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.KEe/dss.KEIW, bins=[lon_bins, lat_bins])
+G_mean_bin[:, mask] = np.nan
 
 # %%
 trans = ccrs.PlateCarree()
@@ -217,15 +228,15 @@ fontsize = 14
 
 fig, axs = plt.subplots(3, 1, figsize=(25, 24), subplot_kw=dict(projection=ccrs.Robinson()))
 
-pccm = axs[0].pcolormesh(lon_bins, lat_bins, KEe_av_bin.T, transform=trans, vmin=0, vmax=2e-1)
+pccm = axs[0].pcolormesh(lon_bins, lat_bins, KEe_mean_bin.T, transform=trans, vmin=0, vmax=3e-1)
 cb = fig.colorbar(pccm, ax=axs[0])
 cb.set_label("Low frequency KE [J kg$^{-1}$]", fontsize=fontsize)
 
-pccm = axs[1].pcolormesh(lon_bins, lat_bins, KEIW_av_bin.T, transform=trans, vmin=0, vmax=1e-2)
+pccm = axs[1].pcolormesh(lon_bins, lat_bins, KEIW_mean_bin.T, transform=trans, vmin=0, vmax=2e-2)
 cb = fig.colorbar(pccm, ax=axs[1])
 cb.set_label("Near inertial KE [J kg$^{-1}$]", fontsize=fontsize)
 
-pccm = axs[2].pcolormesh(lon_bins, lat_bins, np.log10(G_av_bin.T), transform=trans, vmin=-2, vmax=2, cmap="RdBu_r")
+pccm = axs[2].pcolormesh(lon_bins, lat_bins, np.log10(G_mean_bin.T), transform=trans, vmin=-2, vmax=2, cmap="RdBu_r")
 cb = fig.colorbar(pccm, ax=axs[2])
 cb.set_label("$\log_{10}(E_{eddy}/E_{NI})$", fontsize=fontsize)
 
@@ -240,17 +251,26 @@ fig.savefig("../figures/low_freq_to_NI_energy_ratio.pdf", dpi=180, bbox_inches="
 # %% [markdown]
 # ### Stress
 #
-# Integrate stresses in NI band
+# Integrate stresses in NI band:
+#
+# Shear stress
+#
+# \begin{equation}
+# \overline{u^\prime v^\prime} = \int_{0.75}^{1.5f} C_{uv} (\omega) d \omega
+# \end{equation}
+#
+# Normal stress
+#
+# \begin{equation}
+# \overline{u^\prime u^\prime} - \overline{v^\prime v^\prime}  = \int_{0.75f}^{1.5f} P_{uu} - P_{vv} (\omega) d \omega
+# \end{equation}
 
 # %%
-flo = 0.75  # Coriolis lower cut off
-fhi = 1.5  # coriolis upper cut off
-
 Suu = dss.Suu.data
 Svv = dss.Svv.data
 Cuv = dss.Cuv.data
 freq = dss.freq.data
-freqie = np.linspace(0, fe, 50)
+fcor = np.abs(dss.f_mean)*86400/(np.pi*2)
 
 Suui = []
 Svvi = []
@@ -258,7 +278,7 @@ Cuvi = []
 
 for i in tqdm(dss.segment.data):
     # Integrate NI
-    freqi = np.linspace(flo*fcor, fhi*fcor, 50)
+    freqi = np.linspace(flo*fcor[i], fhi*fcor[i], 50)
     Suui.append(itgr.simpson(np.interp(freqi, freq, Suu[i]), freqi))
     Svvi.append(itgr.simpson(np.interp(freqi, freq, Svv[i]), freqi))
     Cuvi.append(itgr.simpson(np.interp(freqi, freq, Cuv[i]), freqi))
@@ -277,9 +297,9 @@ dss["sstress"] = -2*dss.Cuvi
 trans = ccrs.PlateCarree()
 
 fig, axs = plt.subplots(2, 1, figsize=(25, 16), subplot_kw=dict(projection=ccrs.Robinson()))
-scm = axs[0].scatter(dss.lon_av, dss.lat_av, s=2, c=dss.nstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+scm = axs[0].scatter(dss.lon_mean, dss.lat_mean, s=2, c=dss.nstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
 fig.colorbar(scm, ax=axs[0])
-scm = axs[1].scatter(dss.lon_av, dss.lat_av, s=2, c=dss.sstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
+scm = axs[1].scatter(dss.lon_mean, dss.lat_mean, s=2, c=dss.sstress, transform=trans, vmin=-1e-3, vmax=1e-3, cmap="PiYG")
 fig.colorbar(scm, ax=axs[1])
 
 for ax in axs:
@@ -290,12 +310,12 @@ for ax in axs:
 lon_bins = np.arange(0, 362, 2)
 lat_bins = np.arange(-90, 92, 2)
 
-mask = np.abs(utils.mid(lat_bins)) < 10
+mask = np.abs(utils.mid(lat_bins)) < 7.5
 
-nstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.nstress, bins=[lon_bins, lat_bins])
+nstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.nstress, bins=[lon_bins, lat_bins])
 nstress_bin[:, mask] = np.nan
 
-sstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_av, dss.lat_av, dss.sstress, bins=[lon_bins, lat_bins])
+sstress_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.sstress, bins=[lon_bins, lat_bins])
 sstress_bin[:, mask] = np.nan
 
 # %%
@@ -313,6 +333,88 @@ cb.set_label("Shear stress [N m$^{-2}$]", fontsize=fontsize)
 for ax in axs:
     ax.coastlines()
     ax.add_feature(cartopy.feature.LAND)
+
+# %% [markdown]
+# ## Strain rates from GLORYS
+#
+
+# %%
+i = 91943
+seg = dss.isel(segment=i)
+
+# %%
+fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+ax.plot(seg.time, seg.ug, "C0")
+ax.plot(seg.time, seg.u, "C0:")
+ax.plot(seg.time, seg.vg, "C1")
+ax.plot(seg.time, seg.v, "C1:")
+
+# %%
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(seg.time, seg.nstrain, "C0", label="normal strain")
+ax.plot(seg.time, seg.sstrain, "C1", label="shear strain")
+ax.legend()
+
+# %% [markdown]
+# # Energy Transfer
+
+# %%
+nstrain = dss.nstrain.data
+sstrain = dss.sstrain.data
+
+nstrain_mean = np.average(nstrain, axis=1, weights=sig.hann(dss.sample.size))
+sstrain_mean = np.average(sstrain, axis=1, weights=sig.hann(dss.sample.size))
+
+dss["nstrain_mean"] = ("segment", nstrain_mean)
+dss["sstrain_mean"] = ("segment", sstrain_mean)
+
+dss["Fn"] = dss.nstrain_mean*dss.nstress
+dss["Fs"] = dss.sstrain_mean*dss.sstress
+dss["F"] = dss.Fn + dss.Fs
+
+# %%
+lon_bins = np.arange(0, 362, 2)
+lat_bins = np.arange(-90, 92, 2)
+
+mask = np.abs(utils.mid(lat_bins)) < 7.5
+
+Fn_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.Fn, bins=[lon_bins, lat_bins])
+Fn_bin[:, mask] = np.nan
+
+Fs_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.Fs, bins=[lon_bins, lat_bins])
+Fs_bin[:, mask] = np.nan
+
+F_bin, _, _, binnumber = stats.binned_statistic_2d(dss.lon_mean, dss.lat_mean, dss.F, bins=[lon_bins, lat_bins])
+F_bin[:, mask] = np.nan
+
+# %%
+trans = ccrs.PlateCarree()
+fontsize = 14
+
+fig, axs = plt.subplots(3, 1, figsize=(25, 24), subplot_kw=dict(projection=ccrs.Robinson()))
+
+pccm = axs[0].pcolormesh(lon_bins, lat_bins, Fn_bin.T, transform=trans, vmin=-1e-9, vmax=1e-9, cmap="RdBu_r")
+cb = fig.colorbar(pccm, ax=axs[0])
+# cb.set_label("Low frequency KE [J kg$^{-1}$]", fontsize=fontsize)
+
+pccm = axs[1].pcolormesh(lon_bins, lat_bins, Fs_bin.T, transform=trans, vmin=-1e-9, vmax=1e-9, cmap="RdBu_r")
+cb = fig.colorbar(pccm, ax=axs[1])
+# cb.set_label("Near inertial KE [J kg$^{-1}$]", fontsize=fontsize)
+
+pccm = axs[2].pcolormesh(lon_bins, lat_bins, F_bin.T, transform=trans, vmin=-1e-9, vmax=1e-9, cmap="RdBu_r")
+cb = fig.colorbar(pccm, ax=axs[2])
+# cb.set_label("$\log_{10}(E_{eddy}/E_{NI})$", fontsize=fontsize)
+
+for ax in axs:
+
+    ax.coastlines()
+    ax.add_feature(cartopy.feature.LAND)
+    
+    
+# fig.savefig("../figures/low_freq_to_NI_energy_ratio.pdf", dpi=180, bbox_inches="tight", pad_inches=0.01)
+
+fig, ax = plt.subplots()
+ax.plot(np.nanmean(F_bin, axis=0), utils.mid(lat_bins))
 
 # %% [markdown]
 # ## Uneven segment analysis (slow)
