@@ -1,3 +1,4 @@
+#!/usr/bin/env python 
 # Convert external/hourly_GPS_1.04.mat to a netcdf file
 
 import numpy as np

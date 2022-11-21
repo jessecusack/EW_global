@@ -1,0 +1,1 @@
+wget -O external/DIMES_mooring.mat https://github.com/jessecusack/DIMES_eddy_wave_interactions/raw/master/data/moorings.mat
